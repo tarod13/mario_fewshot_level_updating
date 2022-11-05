@@ -1,8 +1,8 @@
 from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning import Trainer
 
-from level_generators import VAEGenerator
-from vae_base import load_data
+from src.level_generators import VAEGenerator
+from src.utils.data import load_data
 
 
 def generate_dataset(batch_size: int = 64):
