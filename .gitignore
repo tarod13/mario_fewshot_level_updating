@@ -1,0 +1,10 @@
+__pycache__/
+.vscode/
+
+# Only keeping the example model, and ignoring the rest.
+*.pt
+!example.pt
+
+# Ignore generated plots
+/plots
+/lightning_logs
