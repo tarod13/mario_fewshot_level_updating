@@ -5,17 +5,22 @@ import numpy as np
 from torch import Tensor
 from torch.optim import Optimizer, Adam
 
-from src.nets.vaes import VanillaVAE
+from src.nets.vaes import VanillaVAE, UNetVAE
 from src.level_generators import BaseGenerator
 from src.utils.plotting import get_img_from_level
 
 
 class VAEGenerator(BaseGenerator):
     def __init__(
-        self, **kwargs
+        self, vae_name: str = 'vanilla', **kwargs
     ):
         super().__init__()
-        self.VAE = VanillaVAE(**kwargs)               
+        if vae_name == 'vanilla':
+            self.VAE = VanillaVAE(**kwargs)
+        elif vae_name == 'unet':
+            self.VAE = UNetVAE(**kwargs) 
+        else:
+            raise ValueError('Invalid VAE name: %s' % vae_name)         
 
     def forward(self, input: Tensor) -> List[Tensor]:
         return self.VAE(input)

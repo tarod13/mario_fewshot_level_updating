@@ -35,8 +35,8 @@ class VanillaVAE(BaseVAE):
             nn.Linear(256, 128),
             nn.Tanh(),
         ) #.to(self.device)
-        self.enc_mu = nn.Sequential(nn.Linear(128, z_dim)) #.to(self.device)
-        self.enc_var = nn.Sequential(nn.Linear(128, z_dim))# .to(self.device)
+        self.enc_mu = nn.Linear(128, z_dim) #.to(self.device)
+        self.enc_var = nn.Linear(128, z_dim) # .to(self.device)
 
         self.decoder = nn.Sequential(
             nn.Linear(self.z_dim, 256),
@@ -46,9 +46,15 @@ class VanillaVAE(BaseVAE):
             nn.Linear(512, self.input_dim),
         ) #.to(self.device)
 
-        self.p_z = Normal(
-            th.zeros(self.z_dim), #, device=self.device),
-            th.ones(self.z_dim) #, device=self.device),
+        # self.p_z = Normal(
+        #     th.zeros(self.z_dim), #, device=self.device),
+        #     th.ones(self.z_dim) #, device=self.device),
+        # )
+
+    def p_z(self, device):
+        return Normal(
+            th.zeros(self.z_dim, device=device),
+            th.ones(self.z_dim, device=device)
         )
 
     def encode(self, x: th.Tensor) -> Normal:
@@ -80,7 +86,7 @@ class VanillaVAE(BaseVAE):
 
     def loss_function(
         self, x: th.Tensor, q_z_given_x: Distribution, 
-        p_x_given_z: Distribution
+        p_x_given_z: Distribution,
     ) -> th.Tensor:
         '''
         Calculates the Evidence Lower BOund
@@ -92,10 +98,12 @@ class VanillaVAE(BaseVAE):
         '''
         labels = x.argmax(dim=1) # x.to(self.device).argmax(dim=1)
         conditional_likelihood = p_x_given_z.log_prob(labels).sum(dim=(1, 2))
-        latent_divergence = kl_divergence(q_z_given_x, self.p_z).sum(dim=1)
+        latent_divergence = kl_divergence(
+            q_z_given_x, self.p_z(labels.device)
+        ).sum(dim=1)
         elbo = conditional_likelihood - latent_divergence
         elbo_loss = (-elbo).mean()
-        return elbo_loss    
+        return elbo_loss
     
     def sample_from_conditional_likelihood(
         self, p_x_given_z: Distribution 
