@@ -12,7 +12,7 @@ from src.utils.plotting import get_img_from_level
 
 class VAEGenerator(BaseGenerator):
     def __init__(
-        self, vae_name: str = 'vanilla', **kwargs
+        self, vae_name: str = 'vanilla', **kwargs, 
     ):
         super().__init__()
         if vae_name == 'vanilla':
@@ -20,13 +20,13 @@ class VAEGenerator(BaseGenerator):
         elif vae_name == 'unet':
             self.VAE = UNetVAE(**kwargs) 
         else:
-            raise ValueError('Invalid VAE name: %s' % vae_name)         
+            raise ValueError('Invalid VAE name: %s' % vae_name)
 
     def forward(self, input: Tensor) -> List[Tensor]:
         return self.VAE(input)
 
     def configure_optimizers(self) -> Optimizer:
-        optimizer = Adam(list(self.parameters()), lr=1e-3)   # TODO: set self.parameters
+        optimizer = Adam(list(self.parameters()), lr=1e-4)   # TODO: set self.parameters
         return optimizer
 
     def step(self, x_batch: Tensor) -> Tensor:
@@ -53,6 +53,7 @@ class VAEGenerator(BaseGenerator):
         boundary_size: int = 4,
         pad: int = 30,
         frames_off: bool = False,
+        version: int = 0,
     ) -> None:
 
         original = val_batch.argmax(dim=1)
@@ -97,7 +98,7 @@ class VAEGenerator(BaseGenerator):
                     ax[r, c].set_yticks([])
 
         plt.tight_layout()             
-        plt.savefig('plots/reconstructions_vae.pdf', dpi=600)
+        plt.savefig(f'plots/reconstructions_vae_version_{version}.pdf', dpi=600)
         plt.show()
         plt.close()
 

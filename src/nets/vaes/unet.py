@@ -62,10 +62,6 @@ class ConvTranspose2dBlock(nn.Module):
     ):
         super().__init__()
 
-        # out_size = calculate_ConvTranspose2d_output_size(
-        #     in_size, kernel_size, stride, output_padding
-        # )
-
         self.upscale_layer = nn.ConvTranspose2d(
             in_channels, in_channels, 
             kernel_size=kernel_size, stride=stride, 
@@ -138,11 +134,6 @@ class UNetVAE(BaseVAE):
             ActivationBlock(32, (6,6)),
             ConvTranspose2dBlock( 32,  c, (3,3), 2, 1),   # output: ( c,h,w)
         )
-
-        # self.p_z = Normal(
-        #     th.zeros(self.z_dim, device=self.device),
-        #     th.ones(self.z_dim, device=self.device) 
-        # )
 
     def p_z(self, device):
         return Normal(
