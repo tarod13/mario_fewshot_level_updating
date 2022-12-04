@@ -115,18 +115,16 @@ class ActivationBlock(nn.Module):
 class UNetVAE(BaseVAE):
     def __init__(
         self,
-        w: int = 14,
-        h: int = 14,
-        c: int = 10,
+        frame_shape,
         z_dim: int = 2,
         token_frequencies: th.Tensor = None,
         **kwargs,
     ):
         super().__init__()
-        self.w = w
-        self.h = h
-        self.c = c
-        self.input_dim = w * h * c
+        self.c = frame_shape[0]
+        self.w = frame_shape[1]
+        self.h = frame_shape[2]        
+        self.input_dim = self.w * self.h * self.c
         self.z_dim = z_dim
 
         if token_frequencies is None:
@@ -135,11 +133,11 @@ class UNetVAE(BaseVAE):
             token_frequencies.flatten()/token_frequencies.sum())
 
         self.encoder = nn.Sequential(
-            Conv2dBlock( c,  32, (3,3), 2, (h,w)),   # output: ( 32,6,6)
+            Conv2dBlock( self.c,  32, (3,3), 2, (self.h,self.w)),   # output: ( 32,6,6)
             ActivationBlock( 32, (6,6)),
-            Conv2dBlock(32,  64, (3,3), 2, (6,6)),   # output: ( 64,2,2) 
+            Conv2dBlock(32,  64, (3,3), 2, (6,6)),                  # output: ( 64,2,2) 
             ActivationBlock( 64, (2,2)),
-            Conv2dBlock(64, 128, (2,2), 1, (2,2)),   # output: (128,1,1) 
+            Conv2dBlock(64, 128, (2,2), 1, (2,2)),                  # output: (128,1,1) 
             ActivationBlock(128, (1,1)),  
         )
         self.enc_mu = nn.Linear(128, z_dim)
@@ -147,11 +145,11 @@ class UNetVAE(BaseVAE):
 
         self.decoder_input = nn.Linear(z_dim, 128)
         self.decoder = nn.Sequential(
-            ConvTranspose2dBlock(128, 64, (2,2), 1, 0, **kwargs),   # output: (64,2,2) 
+            ConvTranspose2dBlock(128, 64, (2,2), 1, 0, **kwargs),        # output: (64,2,2) 
             ActivationBlock(64, (2,2)),
-            ConvTranspose2dBlock( 64, 32, (3,3), 2, 1, **kwargs),   # output: (32,6,6) 
+            ConvTranspose2dBlock( 64, 32, (3,3), 2, 1, **kwargs),        # output: (32,6,6) 
             ActivationBlock(32, (6,6)),
-            ConvTranspose2dBlock( 32,  c, (3,3), 2, 1, **kwargs),   # output:  (c,h,w)
+            ConvTranspose2dBlock( 32,  self.c, (3,3), 2, 1, **kwargs),   # output:  (c,h,w)
         )
 
     def p_z(self, device):

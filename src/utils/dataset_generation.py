@@ -170,8 +170,8 @@ def generate_transformation_nets_dataset(
         destiny_tensor = tensor_dict[destiny]
         stacked_tensors = th.stack([origin_tensor, destiny_tensor], dim=0)
         
-        origin_hold_out = check_if_in_string(hold_out_settings, origin)
-        destiny_hold_out = check_if_in_string(hold_out_settings, destiny)
+        origin_hold_out = origin in hold_out_settings
+        destiny_hold_out = destiny in hold_out_settings
         if origin_hold_out or destiny_hold_out:
             test_tensor_list.append(stacked_tensors)
         else:
@@ -191,7 +191,7 @@ def generate_dataset_from_original_levels(
     size: int = 14, 
     stride: int = 5, 
     num_classes: int = 13,
-    hold_out_settings: list = ['original']
+    hold_out_settings: list = ['original','no_q_mark','no_cannon','no_coins']
 ):  
     # Definition of basic dictionaries
     param_dict = {

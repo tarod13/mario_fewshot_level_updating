@@ -33,6 +33,8 @@ encoding = {
     "[": 8,
     "]": 9,
     "o": 10,
+    "b": 11,
+    "B": 12,
 }
 
 sprites = {
@@ -46,6 +48,8 @@ sprites = {
     encoding["["]: absolute(f"{filepath}/sprites/left_pipe.png"),
     encoding["]"]: absolute(f"{filepath}/sprites/right_pipe.png"),
     encoding["o"]: absolute(f"{filepath}/sprites/coin.png"),
+    encoding["b"]: absolute(f"{filepath}/sprites/cannon_base.png"),
+    encoding["B"]: absolute(f"{filepath}/sprites/cannon.png"),
 }
 
 

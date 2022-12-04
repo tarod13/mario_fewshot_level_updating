@@ -1,5 +1,5 @@
 from src.level_generators import VAEGenerator
-from src.utils.data import load_data
+from src.utils.data_loading import load_pytorch_VAE_dataset as load_data
 from src.utils.plotting import get_img_from_level
 
 import os

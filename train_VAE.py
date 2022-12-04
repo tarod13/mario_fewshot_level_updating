@@ -4,7 +4,7 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from src.level_generators import VAEGenerator
-from src.utils.data import generate_dataset
+from src.utils.data_loading import generate_VAE_dataloader
 
 import argparse
 
@@ -14,7 +14,9 @@ def run(**kwargs):
         log_model=True
     )   
 
-    mario_train, mario_val, token_frequencies = generate_dataset()
+    mario_train, mario_val, token_frequencies, frame_shape = \
+        generate_VAE_dataloader()
+    kwargs['frame_shape'] = frame_shape
     kwargs['token_frequencies'] = token_frequencies
     mario_generator = VAEGenerator(**kwargs)
 

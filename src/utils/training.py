@@ -1,6 +1,9 @@
 import numpy as np
 import torch as th
-from src.utils.data import load_data, estimate_token_frequency
+from src.utils.data_loading import (
+    load_numpy_VAE_dataset as  load_data,
+    estimate_token_frequency
+)
 
 
 def create_mask(

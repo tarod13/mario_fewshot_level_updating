@@ -80,13 +80,15 @@ class VAEGenerator(BaseGenerator):
         version: int = 0,
     ) -> None:
 
-        noise = 0*randn(val_batch.shape)
-        original = (val_batch+noise).argmax(dim=1)
-        reconstruction = self.VAE.generate(val_batch+noise)
+        indices = np.random.randint(0, high=val_batch.shape[0], size=n_rows*n_cols)
+        batch = val_batch[indices]
+        noise = 0*randn(batch.shape)
+        original = (batch+noise).argmax(dim=1)
+        reconstruction = self.VAE.generate(batch+noise)
         
         images_original = [
             get_img_from_level(original[i].cpu().detach().numpy()) 
-            for i in range(val_batch.shape[0])
+            for i in range(batch.shape[0])
         ]
 
         images_reconstructed = [
@@ -108,6 +110,8 @@ class VAEGenerator(BaseGenerator):
         images[:,:,bidx_i:bidx_f,0] = 0.60*255   # R
         images[:,:,bidx_i:bidx_f,1] = 0.15*255   # G
         images[:,:,bidx_i:bidx_f,2] = 0.40*255   # B
+
+        
 
         fig, ax = plt.subplots(n_rows, n_cols, figsize=(15,10))
         for r in range(0, n_rows):
