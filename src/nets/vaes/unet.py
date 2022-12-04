@@ -59,8 +59,14 @@ class ConvTranspose2dBlock(nn.Module):
         kernel_size, 
         stride, 
         output_padding,
+        **kwargs
     ):
         super().__init__()
+
+        if 'unet_detach_mode' in kwargs:
+            self.detach_mode = kwargs['unet_detach_mode']
+        else:
+            self.detach_mode = 'features'
 
         self.upscale_layer = nn.ConvTranspose2d(
             in_channels, in_channels, 
@@ -76,7 +82,13 @@ class ConvTranspose2dBlock(nn.Module):
     def forward(self, x):
         input, skip_feature_list = x
         delta = self.upscale_layer(input)
-        features = skip_feature_list[-1].detach()
+        features = skip_feature_list[-1]
+        
+        if self.detach_mode == 'features':
+            features = features.detach()
+        elif self.detach_mode == 'delta':
+            delta = delta.detach()
+
         output = self.reconstruction_layer(features+delta)
         if len(skip_feature_list) > 1:
             return [output, skip_feature_list[:-1]]
@@ -105,8 +117,10 @@ class UNetVAE(BaseVAE):
         self,
         w: int = 14,
         h: int = 14,
-        c: int = 11,
+        c: int = 10,
         z_dim: int = 2,
+        token_frequencies: th.Tensor = None,
+        **kwargs,
     ):
         super().__init__()
         self.w = w
@@ -114,6 +128,11 @@ class UNetVAE(BaseVAE):
         self.c = c
         self.input_dim = w * h * c
         self.z_dim = z_dim
+
+        if token_frequencies is None:
+            token_frequencies = th.ones(c,)
+        self.token_frequencies = (
+            token_frequencies.flatten()/token_frequencies.sum())
 
         self.encoder = nn.Sequential(
             Conv2dBlock( c,  32, (3,3), 2, (h,w)),   # output: ( 32,6,6)
@@ -128,11 +147,11 @@ class UNetVAE(BaseVAE):
 
         self.decoder_input = nn.Linear(z_dim, 128)
         self.decoder = nn.Sequential(
-            ConvTranspose2dBlock(128, 64, (2,2), 1, 0),   # output: (64,2,2) 
+            ConvTranspose2dBlock(128, 64, (2,2), 1, 0, **kwargs),   # output: (64,2,2) 
             ActivationBlock(64, (2,2)),
-            ConvTranspose2dBlock( 64, 32, (3,3), 2, 1),   # output: (32,6,6) 
+            ConvTranspose2dBlock( 64, 32, (3,3), 2, 1, **kwargs),   # output: (32,6,6) 
             ActivationBlock(32, (6,6)),
-            ConvTranspose2dBlock( 32,  c, (3,3), 2, 1),   # output: ( c,h,w)
+            ConvTranspose2dBlock( 32,  c, (3,3), 2, 1, **kwargs),   # output:  (c,h,w)
         )
 
     def p_z(self, device):
@@ -141,23 +160,26 @@ class UNetVAE(BaseVAE):
             th.ones(self.z_dim, device=device)
         )
 
-    def encode(self, x: th.Tensor) -> Normal:
+    def encode(self, x: th.Tensor, test: bool = False) -> Normal:
         '''Returns the normal posterior model q_Z(.|x)'''
         r, skip_feature_list = self.encoder([x,[]])
         r_flat = r.view(-1, 128)
         mu = self.enc_mu(r_flat)
-        log_var = self.enc_var(r_flat)
-        std = th.exp(0.5*log_var)
-        return [Normal(mu, std), skip_feature_list]
+        if not test:
+            log_var = self.enc_var(r_flat)
+            std = th.exp(0.5*log_var)
+            out = Normal(mu, std) 
+        else:
+            out = mu        
+        return [out, skip_feature_list]
 
     def decode(self, z: th.Tensor, skip_feature_list: th.Tensor) -> Categorical:
         '''Returns the categorical likelihood model p_X(.|z)'''
         input_flat = self.decoder_input(z)
         input = input_flat.reshape(tuple(input_flat.shape)+(1,1))
-        logits = self.decoder([input, skip_feature_list])
-        p_x_given_z = Categorical(
-            logits=logits.reshape(-1, self.h, self.w, self.c)
-        )
+        logits = self.decoder([input, skip_feature_list])\
+            .transpose(1,2).transpose(2,3)
+        p_x_given_z = Categorical(logits=logits)   #.reshape(-1, self.h, self.w, self.c)
         return p_x_given_z
 
     def forward(self, x: th.Tensor) -> List[Distribution]:
@@ -171,8 +193,11 @@ class UNetVAE(BaseVAE):
         return [q_z_given_x, p_x_given_z]
 
     def loss_function(
-        self, x: th.Tensor, q_z_given_x: Distribution, 
-        p_x_given_z: Distribution
+        self, x: th.Tensor, 
+        q_z_given_x: Distribution, 
+        p_x_given_z: Distribution, 
+        x_masked: th.Tensor, mask: th.Tensor,
+        impainting_prop: float = 0.986,
     ) -> th.Tensor:
         '''
         Calculates the Evidence Lower BOund
@@ -182,14 +207,42 @@ class UNetVAE(BaseVAE):
         for the given input x, likelihood model p_X(.|z), 
         and posterior q_Z(.|x).
         '''
-        labels = x.argmax(dim=1) 
-        conditional_likelihood = p_x_given_z.log_prob(labels).sum(dim=(1, 2))
+        labels = x.argmax(dim=1)
+        frequencies = self.token_frequencies[labels.long()]
+        token_weights = 1/frequencies
+        token_weights *= self.h*self.w / token_weights
+
+        impainting_filter = 1 - mask
+        impainting_filter = impainting_filter.max(1)[0]
+        reconstruction_filter = 1 - impainting_filter
+
+        reconstruction_weights = token_weights * reconstruction_filter
+        impainting_weights = token_weights * impainting_filter
+
+        reconstruction_conditional_likelihood = th.einsum(
+            'hij,hij->h', 
+            p_x_given_z.log_prob(labels),
+            reconstruction_weights
+        )
+        impainting_conditional_likelihood = th.einsum(
+            'hij,hij->h', 
+            p_x_given_z.log_prob(labels),
+            impainting_weights
+        )
+        conditional_likelihood = (
+            (1 - impainting_prop) * reconstruction_conditional_likelihood
+            + impainting_prop * impainting_conditional_likelihood
+        )
+
         latent_divergence = kl_divergence(
             q_z_given_x, self.p_z(labels.device)
         ).sum(dim=1)
+
         elbo = conditional_likelihood - latent_divergence
         elbo_loss = (-elbo).mean()
-        return elbo_loss    
+        rec_loss = -reconstruction_conditional_likelihood.mean().detach().item()
+        imp_loss = -impainting_conditional_likelihood.mean().detach().item()
+        return elbo_loss, rec_loss, imp_loss
     
     def sample_from_conditional_likelihood(
         self, p_x_given_z: Distribution 
@@ -213,7 +266,8 @@ class UNetVAE(BaseVAE):
     ) -> th.Tensor:
         '''Generates reconstruction of input.'''
         with th.no_grad():
-            p_x_given_z = self(x)[1] 
+            z, skip_feature_list = self.encode(x, test=True)
+            p_x_given_z = self.decode(z, skip_feature_list)
         x = self.sample_from_conditional_likelihood(p_x_given_z)
         return x
 

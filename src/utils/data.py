@@ -17,12 +17,22 @@ def load_data(
     # Separating into train and test.
     n_data, _, _, _ = data.shape
     train_index = int(n_data * train_percentage)
-    train_data = data[:train_index, :, :, :]
-    val_data = data[train_index:, :, :, :]
-    train_tensors = th.from_numpy(train_data).type(th.float)
+    train_data = data[:train_index, :-1, :, :]
+    val_data = data[train_index:, :-1, :, :]
+    train_tensor = th.from_numpy(train_data).type(th.float)
     test_tensors = th.from_numpy(val_data).type(th.float)
 
-    return train_tensors, test_tensors
+    return train_tensor, test_tensors
+
+def estimate_token_frequency(
+    train_tensor: np.ndarray,
+):
+    '''Calculates sample frequency for each token.'''
+    # Load data
+    labels = train_tensor.argmax(dim=1).flatten()
+    unique, counts = labels.unique(return_counts=True)
+    frequencies = counts / counts.sum()
+    return frequencies
 
 def generate_dataset(
     batch_size: int = 64, 
@@ -32,12 +42,25 @@ def generate_dataset(
 ):
     '''Generates training and validation DataLoaders.'''
     # Load data
-    train_tensors, val_tensors = load_data(train_percentage)
+    train_tensor, val_tensor = load_data(train_percentage)
 
     # Create dataloaders
-    train_dataset = TensorDataset(train_tensors)
-    mario_train = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle_train)
-    val_dataset = TensorDataset(val_tensors)
-    mario_val = DataLoader(val_dataset, batch_size=batch_size, shuffle=shuffle_val)
+    train_dataset = TensorDataset(train_tensor)
+    mario_train = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=shuffle_train)
+    val_dataset = TensorDataset(val_tensor)
+    mario_val = DataLoader(
+        val_dataset, batch_size=batch_size, shuffle=shuffle_val)
 
-    return mario_train, mario_val
+    # Calculate token frequency
+    token_frequencies = estimate_token_frequency(train_tensor)
+
+    return mario_train, mario_val, token_frequencies
+
+
+if __name__ == "__main__":
+    train_percentage = 0.8
+    train_tensor, val_tensor = load_data(train_percentage)
+    total_tensor = th.cat([train_tensor, val_tensor], axis=0)
+    frequencies = estimate_token_frequency(total_tensor)
+    print(frequencies)

@@ -15,8 +15,9 @@ class VanillaVAE(BaseVAE):
         self,
         w: int = 14,
         h: int = 14,
-        c: int = 11,
+        c: int = 10,
         z_dim: int = 2,
+        **kwargs,
         #device: str = None,
     ):
         super().__init__()
@@ -83,6 +84,7 @@ class VanillaVAE(BaseVAE):
     def loss_function(
         self, x: th.Tensor, q_z_given_x: Distribution, 
         p_x_given_z: Distribution,
+        *args, **kwargs
     ) -> th.Tensor:
         '''
         Calculates the Evidence Lower BOund
@@ -99,7 +101,7 @@ class VanillaVAE(BaseVAE):
         ).sum(dim=1)
         elbo = conditional_likelihood - latent_divergence
         elbo_loss = (-elbo).mean()
-        return elbo_loss    
+        return elbo_loss, None, None    
     
     def sample_from_conditional_likelihood(
         self, p_x_given_z: Distribution 

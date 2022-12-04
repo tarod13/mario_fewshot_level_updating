@@ -2,47 +2,71 @@ from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
-from torch import Tensor
+from torch import Tensor, randn
 from torch.optim import Optimizer, Adam
 
 from src.nets.vaes import VanillaVAE, UNetVAE
 from src.level_generators import BaseGenerator
+from src.utils.training import create_mask
 from src.utils.plotting import get_img_from_level
 
 
+def set_defaults(**kwargs):
+    if 'vae_name' not in kwargs: kwargs['vae_name'] = 'vanilla'
+    if 'z_dim' not in kwargs: kwargs['z_dim'] = 2
+    if 'lr' not in kwargs: kwargs['lr'] = 1e-4
+    return kwargs
+
 class VAEGenerator(BaseGenerator):
     def __init__(
-        self, vae_name: str = 'vanilla', **kwargs, 
+        self, **kwargs, 
     ):
         super().__init__()
-        if vae_name == 'vanilla':
+        
+        kwargs = set_defaults(**kwargs)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+        if kwargs['vae_name'] == 'vanilla':
             self.VAE = VanillaVAE(**kwargs)
-        elif vae_name == 'unet':
-            self.VAE = UNetVAE(**kwargs) 
+        elif kwargs['vae_name'] == 'unet':
+            self.VAE = UNetVAE(**kwargs)
         else:
-            raise ValueError('Invalid VAE name: %s' % vae_name)
+            raise ValueError('Invalid VAE name: %s' % kwargs['vae_name'])
+
+        self.save_hyperparameters()
 
     def forward(self, input: Tensor) -> List[Tensor]:
         return self.VAE(input)
 
-    def configure_optimizers(self) -> Optimizer:
-        optimizer = Adam(list(self.parameters()), lr=1e-4)   # TODO: set self.parameters
+    def configure_optimizers(self, **kwargs) -> Optimizer:
+        if 'lr' not in kwargs:
+            kwargs['lr'] = 1e-4
+        optimizer = Adam(list(self.parameters()), lr=kwargs['lr'])   # TODO: set self.parameters
         return optimizer
 
     def step(self, x_batch: Tensor) -> Tensor:
         x_batch = x_batch[0]
-        q_z_given_x, p_x_given_z = self.forward(x_batch)
-        loss = self.VAE.loss_function(x_batch, q_z_given_x, p_x_given_z)
-        return loss
+        x_batch_masked, batch_mask = create_mask(
+            x_batch, self.VAE.token_frequencies
+        )
+        q_z_given_x, p_x_given_z = self.forward(x_batch_masked)
+        loss, rec_loss, imp_loss = self.VAE.loss_function(
+            x_batch, q_z_given_x, p_x_given_z, x_batch_masked, batch_mask)
+        return loss, rec_loss, imp_loss
 
     def training_step(self, train_batch: Tensor, batch_idx: int) -> Tensor:
-        loss = self.step(train_batch)
+        loss, rec_loss, imp_loss = self.step(train_batch)
         self.log("train_loss", loss)
+        self.log("train_reconstruction_loss", rec_loss)
+        self.log("train_impainting_loss", imp_loss)
         return loss
         
     def validation_step(self, val_batch: Tensor, batch_idx: int) -> None:
-        loss = self.step(val_batch)
+        loss, rec_loss, imp_loss = self.step(val_batch)
         self.log("val_loss", loss)
+        self.log("val_reconstruction_loss", rec_loss)
+        self.log("val_impainting_loss", imp_loss)
         return loss
 
     def reconstruct(
@@ -56,8 +80,9 @@ class VAEGenerator(BaseGenerator):
         version: int = 0,
     ) -> None:
 
-        original = val_batch.argmax(dim=1)
-        reconstruction = self.VAE.generate(val_batch)
+        noise = 0*randn(val_batch.shape)
+        original = (val_batch+noise).argmax(dim=1)
+        reconstruction = self.VAE.generate(val_batch+noise)
         
         images_original = [
             get_img_from_level(original[i].cpu().detach().numpy()) 
