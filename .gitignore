@@ -8,4 +8,5 @@ __pycache__/
 /mario_level_updating
 /artifacts
 /data/*.np*
+/data/*.pt*
 /train_updater.py
