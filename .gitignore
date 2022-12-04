@@ -7,3 +7,5 @@ __pycache__/
 /wandb
 /mario_level_updating
 /artifacts
+/data/*.np*
+/train_updater.py
