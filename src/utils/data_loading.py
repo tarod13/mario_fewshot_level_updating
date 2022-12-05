@@ -75,7 +75,7 @@ def load_pytorch_TN_dataset(
     """Returns two tensors with training and validation data."""
     # Loading the data.
     train_tensor = th.load("./data/tnet_dataset_train.pt").type(th.float)
-    #test_tensor = th.load("./data/tnet_dataset_test.pt").type(th.float)
+    test_tensor = th.load("./data/tnet_dataset_test.pt").type(th.float)
 
     n_frames = train_tensor.shape[2]
     th.manual_seed(shuffle_seed)
@@ -87,9 +87,9 @@ def load_pytorch_TN_dataset(
 
     train_tensor = append_transformation_examples(train_tensor, n_examples)
     val_tensor = append_transformation_examples(val_tensor, n_examples)
-    #test_tensor = append_transformation_examples(test_tensor, n_examples)
+    test_tensor = append_transformation_examples(test_tensor, n_examples)
 
-    return train_tensor, val_tensor#, test_tensor
+    return train_tensor, val_tensor, test_tensor
 
 def estimate_token_frequency(
     train_tensor: np.ndarray,
@@ -141,7 +141,7 @@ def generate_TN_dataloader(
     '''Generates training and validation DataLoaders.'''
     # Load data
     train_tensor, val_tensor = load_pytorch_TN_dataset(
-        train_percentage, seed, n_examples)
+        train_percentage, seed, n_examples)[:2]
 
     # Create dataloaders
     train_dataset = TensorDataset(train_tensor)

@@ -55,7 +55,7 @@ class TNGenerator(BaseGenerator):
         self.log("val_loss", loss)
         return loss
 
-    def reconstruct(
+    def update(
         self, 
         val_batch: Tensor, 
         n_rows: int = 5, 
@@ -69,8 +69,8 @@ class TNGenerator(BaseGenerator):
         indices = np.random.randint(0, high=val_batch.shape[0], size=n_rows*n_cols)
         batch = val_batch[indices]
         noise = 0*randn(batch.shape)
-        original = (batch+noise).argmax(dim=1)
-        reconstruction = self.VAE.generate(batch+noise)
+        original = (batch+noise)[:,1].argmax(dim=1)
+        update = self.tnet.generate(batch+noise)
         
         images_original = [
             get_img_from_level(original[i].cpu().detach().numpy()) 
@@ -78,8 +78,8 @@ class TNGenerator(BaseGenerator):
         ]
 
         images_reconstructed = [
-            get_img_from_level(reconstruction[i].cpu().detach().numpy()) 
-            for i in range(reconstruction.shape[0])
+            get_img_from_level(update[i].cpu().detach().numpy()) 
+            for i in range(update.shape[0])
         ]
 
         padding = ((0,0),(0,boundary_size+2*pad),(0,0))
@@ -113,6 +113,6 @@ class TNGenerator(BaseGenerator):
                     ax[r, c].set_yticks([])
 
         plt.tight_layout()             
-        plt.savefig(f'plots/reconstructions_vae_version_{version}.pdf', dpi=600)
+        plt.savefig(f'plots/updates_tnet_version_{version}.pdf', dpi=600)
         plt.show()
         plt.close()

@@ -48,7 +48,7 @@ class TNet(BaseTN):
         return x_embedding
 
     def encode(self, XY: th.Tensor) -> List:
-        '''Returns the normal posterior model q_Z(.|x)'''
+        '''Returns the approximate embedding of the transformed frame.'''
         x = XY[:,0]
         y = XY[:,2]
         y_transformed = XY[:,3]
@@ -77,14 +77,14 @@ class TNet(BaseTN):
         self, embedding: th.Tensor, 
         skip_feature_list: th.Tensor
     ) -> Categorical:
-        '''Returns the categorical likelihood model p_X(.|z)'''
+        '''Returns the categorical likelihood model p_X(.|e)'''
         p_x_given_embedding = self.unet.decode(embedding, skip_feature_list)
         return p_x_given_embedding
 
     def forward(self, XY: th.Tensor) -> List[Distribution]:
         '''
-        Encodes and decodes the input, generating the posterior 
-        and likelihood models q_Z(.|x) and p_X(.|z).
+        Encodes and decodes the input, generating the approximate
+        embedding e(x_transformed) and likelihood models p_X(.|e).
         '''
         x_transformed_embedding, skip_feature_list = self.encode(XY) 
         p_x_given_embedding = self.decode(
@@ -110,3 +110,19 @@ class TNet(BaseTN):
         embedding_difference = x_transformed_embedding_real - x_transformed_embedding
         loss = (embedding_difference**2).sum(1).mean()
         return loss
+
+    def sample_from_conditional_likelihood(
+        self, p_x_given_embedding: Distribution 
+    ) -> th.Tensor:
+        '''Generate sample batch x from p_X(.|e).'''
+        x = p_x_given_embedding.probs.argmax(dim=-1)
+        return x
+
+    def generate(
+        self, XY: th.Tensor
+    ) -> th.Tensor:
+        '''Generates reconstruction of input.'''
+        with th.no_grad():
+            p_x_given_embedding = self(XY)[1]
+        x = self.sample_from_conditional_likelihood(p_x_given_embedding)
+        return x
