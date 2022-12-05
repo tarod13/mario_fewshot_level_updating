@@ -177,8 +177,8 @@ def generate_transformation_nets_dataset(
         else:
             train_tensor_list.append(stacked_tensors)
 
-    train_tensor = th.cat(train_tensor_list, dim=1)
-    test_tensor = th.cat(test_tensor_list, dim=1)
+    train_tensor = th.stack(train_tensor_list, dim=1)
+    test_tensor = th.stack(test_tensor_list, dim=1)
 
     logger.info(f'Storing TransformationNet train and test datasets...')
     logger.info(f'Train dataset size: {train_tensor.shape}')
@@ -191,7 +191,7 @@ def generate_dataset_from_original_levels(
     size: int = 14, 
     stride: int = 5, 
     num_classes: int = 13,
-    hold_out_settings: list = ['original','no_q_mark','no_cannon','no_coins']
+    hold_out_settings: list = ['original','no_cannon','no_coins','no_cannon-no_coins']
 ):  
     # Definition of basic dictionaries
     param_dict = {

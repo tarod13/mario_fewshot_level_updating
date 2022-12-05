@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.distributions import (
     Distribution, Normal, Categorical, kl_divergence)
 
-from src.nets.vaes import BaseVAE
+from src.nets import BaseVAE
 
 
 class VanillaVAE(BaseVAE):

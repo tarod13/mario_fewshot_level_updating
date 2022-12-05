@@ -5,7 +5,7 @@ __pycache__/
 /plots
 /lightning_logs
 /wandb
-/mario_level_updating
+/mario_level_updating*
 /artifacts
 /data/*.np*
 /data/*.pt*

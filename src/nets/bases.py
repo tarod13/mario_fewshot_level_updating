@@ -24,3 +24,18 @@ class BaseVAE(nn.Module):
     @abstractmethod
     def loss_function(self, *inputs: Any, **kwargs) -> Tensor:
         pass
+
+class BaseTN(nn.Module):
+    
+    def __init__(self) -> None:
+        super().__init__()
+
+    def encode(self, input: Tensor) -> List[Tensor]:
+        raise NotImplementedError
+
+    def decode(self, input: Tensor) -> Categorical:
+        raise NotImplementedError
+
+    @abstractmethod
+    def loss_function(self, *inputs: Any, **kwargs) -> Tensor:
+        pass

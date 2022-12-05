@@ -1,6 +1,8 @@
 import numpy as np
 import torch as th
 from torch.utils.data import TensorDataset, DataLoader
+from torch.distributions import Categorical
+import wandb
 
 
 def load_numpy_VAE_dataset(
@@ -29,7 +31,7 @@ def load_pytorch_VAE_dataset(
 ):
     """Returns two tensors with training and validation data."""
     # Loading the data.
-    train_tensor = th.load("./data/vae_dataset_test.pt").type(th.float)
+    train_tensor = th.load("./data/vae_dataset_train.pt").type(th.float)
     test_tensor = th.load("./data/vae_dataset_test.pt").type(th.float)
 
     # Shuffling the training data
@@ -39,28 +41,62 @@ def load_pytorch_VAE_dataset(
 
     return train_tensor, test_tensor
 
+def append_transformation_examples(x, n_examples):
+    frame_difference = th.absolute(x[0] - x[1]).sum((2,3,4))
+    mask = th.where(
+        frame_difference != 0, 
+        th.ones_like(frame_difference), 
+        th.zeros_like(frame_difference),
+    )
+    mask /= mask.sum(dim=1, keepdim=True)
+
+    sample = Categorical(probs=mask)\
+        .sample((mask.shape[1], n_examples))\
+        .transpose(1,2).transpose(0,1)
+    n_settings = sample.shape[0]
+    sample_flatten = sample.view(n_settings, -1)
+    example_list = []
+    for setting in range(n_settings):
+        example_list.append(
+            x[:,setting,sample_flatten[setting,:]]
+        )
+    examples = th.stack(example_list, dim=1)
+    x = th.repeat_interleave(x, n_examples, dim=2)
+    x = th.cat([x, examples], dim=0)
+    x = x.reshape(x.shape[0],-1,*x.shape[3:])
+    x = x.transpose(0,1)
+    return x
+
 def load_pytorch_TN_dataset(
+    train_percentage=0.8,
     shuffle_seed=0,
+    n_examples=10,
 ):
     """Returns two tensors with training and validation data."""
     # Loading the data.
-    train_tensor = th.load("./data/tnet_dataset_test.pt").type(th.float)
-    test_tensor = th.load("./data/tnet_dataset_test.pt").type(th.float)
+    train_tensor = th.load("./data/tnet_dataset_train.pt").type(th.float)
+    #test_tensor = th.load("./data/tnet_dataset_test.pt").type(th.float)
 
-    # Shuffling the training data
+    n_frames = train_tensor.shape[2]
     th.manual_seed(shuffle_seed)
-    idx = th.randperm(train_tensor.size(1))
-    train_tensor = train_tensor[:,idx]
-    
-    return train_tensor, test_tensor
+    idx = th.randperm(n_frames)
+    train_tensor = train_tensor[:,:,idx]
+    train_index = int(n_frames * train_percentage)
+    val_tensor = train_tensor[:,:,train_index:,:,:,:]
+    train_tensor = train_tensor[:,:,:train_index,:,:,:]
+
+    train_tensor = append_transformation_examples(train_tensor, n_examples)
+    val_tensor = append_transformation_examples(val_tensor, n_examples)
+    #test_tensor = append_transformation_examples(test_tensor, n_examples)
+
+    return train_tensor, val_tensor#, test_tensor
 
 def estimate_token_frequency(
     train_tensor: np.ndarray,
 ):
     '''Calculates sample frequency for each token.'''
     # Load data
-    labels = train_tensor.argmax(dim=1).flatten()
-    unique, counts = labels.unique(return_counts=True)
+    counts = train_tensor.sum((0,2,3)).flatten() + 1
     frequencies = counts / counts.sum()
     return frequencies
 
@@ -77,7 +113,8 @@ def generate_VAE_dataloader(
     if load_original:
         train_tensor, val_tensor = load_pytorch_VAE_dataset(seed)
     else:
-        train_tensor, val_tensor = load_numpy_VAE_dataset(train_percentage, seed)
+        train_tensor, val_tensor = load_numpy_VAE_dataset(
+            train_percentage, seed)
 
     # Create dataloaders
     train_dataset = TensorDataset(train_tensor)
@@ -92,6 +129,30 @@ def generate_VAE_dataloader(
 
     return mario_train, mario_val, token_frequencies, train_tensor.shape[1:]
 
+def generate_TN_dataloader(
+    batch_size: int = 64, 
+    train_percentage: float = 0.8,
+    shuffle_train: bool = False,
+    shuffle_val: bool = False,
+    seed: int = 0,
+    n_examples: int = 10,
+    load_original: bool = True,
+):
+    '''Generates training and validation DataLoaders.'''
+    # Load data
+    train_tensor, val_tensor = load_pytorch_TN_dataset(
+        train_percentage, seed, n_examples)
+
+    # Create dataloaders
+    train_dataset = TensorDataset(train_tensor)
+    mario_train = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=shuffle_train)
+    val_dataset = TensorDataset(val_tensor)
+    mario_val = DataLoader(
+        val_dataset, batch_size=batch_size, shuffle=shuffle_val)
+
+    return mario_train, mario_val, train_tensor.shape[2:]
+
 
 if __name__ == "__main__":
 
@@ -103,11 +164,11 @@ if __name__ == "__main__":
         train_tensor_vae, val_tensor_vae = load_numpy_VAE_dataset(train_percentage, seed)
     else:
         train_tensor_vae, val_tensor_vae = load_pytorch_VAE_dataset(seed)
-        train_tensor_tn, val_tensor_tn = load_pytorch_TN_dataset(seed)
+        train_tensor_tn, val_tensor_tn, test_tensor_tn = load_pytorch_TN_dataset(
+            shuffle_seed=seed)
         print(f'Shape of TNet train tensor: {train_tensor_tn.shape}')
 
-
     total_tensor = th.cat([train_tensor_vae, val_tensor_vae], axis=0)
-    frequencies = estimate_token_frequency(total_tensor)
+    frequencies = estimate_token_frequency(train_tensor_vae)
     print('Token appearance percentage:')
-    print((frequencies.numpy()*100).round(2))
+    print((frequencies.numpy()*100))

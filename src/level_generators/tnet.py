@@ -5,19 +5,18 @@ import numpy as np
 from torch import Tensor, randn
 from torch.optim import Optimizer, Adam
 
-from src.nets import VanillaVAE, UNetVAE
+from src.nets import TNet
 from src.level_generators import BaseGenerator
 from src.utils.training import create_mask
 from src.utils.plotting import get_img_from_level
 
 
 def set_defaults(**kwargs):
-    if 'vae_name' not in kwargs: kwargs['vae_name'] = 'vanilla'
     if 'z_dim' not in kwargs: kwargs['z_dim'] = 2
     if 'lr' not in kwargs: kwargs['lr'] = 1e-4
     return kwargs
 
-class VAEGenerator(BaseGenerator):
+class TNGenerator(BaseGenerator):
     def __init__(
         self, **kwargs, 
     ):
@@ -27,17 +26,11 @@ class VAEGenerator(BaseGenerator):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-        if kwargs['vae_name'] == 'vanilla':
-            self.VAE = VanillaVAE(**kwargs)
-        elif kwargs['vae_name'] == 'unet':
-            self.VAE = UNetVAE(**kwargs)
-        else:
-            raise ValueError('Invalid VAE name: %s' % kwargs['vae_name'])
-
+        self.tnet = TNet(**kwargs)
         self.save_hyperparameters()
 
     def forward(self, input: Tensor) -> List[Tensor]:
-        return self.VAE(input)
+        return self.tnet(input)
 
     def configure_optimizers(self, **kwargs) -> Optimizer:
         if 'lr' not in kwargs:
@@ -45,28 +38,21 @@ class VAEGenerator(BaseGenerator):
         optimizer = Adam(list(self.parameters()), lr=kwargs['lr'])   # TODO: set self.parameters
         return optimizer
 
-    def step(self, x_batch: Tensor) -> Tensor:
-        x_batch = x_batch[0]
-        x_batch_masked, batch_mask = create_mask(
-            x_batch, self.VAE.token_frequencies
-        )
-        q_z_given_x, p_x_given_z = self.forward(x_batch_masked)
-        loss, rec_loss, imp_loss = self.VAE.loss_function(
-            x_batch, q_z_given_x, p_x_given_z, x_batch_masked, batch_mask)
-        return loss, rec_loss, imp_loss
+    def step(self, XY_batch: Tensor) -> Tensor:
+        XY_batch = XY_batch[0]
+        x_transformed_embedding, p_x_given_embedding = self.forward(XY_batch)
+        loss = self.tnet.loss_function(
+            x_transformed_embedding, XY_batch, p_x_given_embedding)
+        return loss
 
     def training_step(self, train_batch: Tensor, batch_idx: int) -> Tensor:
-        loss, rec_loss, imp_loss = self.step(train_batch)
+        loss = self.step(train_batch)
         self.log("train_loss", loss)
-        self.log("train_reconstruction_loss", rec_loss)
-        self.log("train_impainting_loss", imp_loss)
         return loss
         
     def validation_step(self, val_batch: Tensor, batch_idx: int) -> None:
-        loss, rec_loss, imp_loss = self.step(val_batch)
+        loss = self.step(val_batch)
         self.log("val_loss", loss)
-        self.log("val_reconstruction_loss", rec_loss)
-        self.log("val_impainting_loss", imp_loss)
         return loss
 
     def reconstruct(
@@ -130,6 +116,3 @@ class VAEGenerator(BaseGenerator):
         plt.savefig(f'plots/reconstructions_vae_version_{version}.pdf', dpi=600)
         plt.show()
         plt.close()
-
-    # def backward(self, trainer, loss: Tensor, optimizer: Optimizer, optimizer_idx: int):
-    #     loss.backward()

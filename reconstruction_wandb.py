@@ -1,11 +1,12 @@
-from src.level_generators import VAEGenerator
-from src.utils.data_loading import load_pytorch_VAE_dataset as load_data
-from src.utils.plotting import get_img_from_level
-
 import os
 import argparse
 import wandb
 from pathlib import Path
+
+from src.level_generators import VAEGenerator
+from src.utils.data_loading import load_pytorch_VAE_dataset as load_data
+from src.utils.load_models import load_VAE_model
+from src.utils.plotting import get_img_from_level
 
 
 def get_checkpoint(vae_name, version):
@@ -26,28 +27,11 @@ def run():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('wandb_checkpoint', type=str)
-    #parser.add_argument('vae_name', type=str, help='Name of VAE class to use')
-    #parser.add_argument('--z_dim', type=int, default=2, help='Latent dimension')
     args = parser.parse_args()
 
-    mario_val = load_data()[1]
-
-    # reference can be retrieved in artifacts panel
-    # "VERSION" can be a version (ex: "v2") or an alias ("latest or "best")
-    # checkpoint_reference = "tarod13/mario_level_updating/model-2afjdvgc:v0"
-    # checkpoint_reference = "tarod13/mario_level_updating/model-crn52vpd:v0"   
-    #checkpoint_reference = "tarod13/mario_level_updating/model-3d53z202:v0"     
-    # version = checkpoint_reference.split(":",1)[1]
     version = args.wandb_checkpoint.split("/")[-1].split(":",1)[0]
-
-    # download checkpoint locally (if not already cached)
-    run = wandb.init(project="mario_level_updating")
-    artifact = run.use_artifact(args.wandb_checkpoint, type="model")
-    artifact_dir = artifact.download()
-
-    # load checkpoint
-    mario_generator = VAEGenerator.load_from_checkpoint(
-        Path(artifact_dir) / "model.ckpt")
+    mario_val = load_data()[1]
+    mario_generator = load_VAE_model(**vars(args))    
     mario_generator.reconstruct(mario_val, version=version)
 
 
