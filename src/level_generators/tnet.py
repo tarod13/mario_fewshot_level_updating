@@ -46,13 +46,19 @@ class TNGenerator(BaseGenerator):
         return loss
 
     def training_step(self, train_batch: Tensor, batch_idx: int) -> Tensor:
-        loss = self.step(train_batch)
+        loss, up_loss_diff, up_loss_same, emb_loss= self.step(train_batch)
         self.log("train_loss", loss)
+        self.log("train_update_loss_diff", up_loss_diff)
+        self.log("train_update_loss_same", up_loss_same)
+        self.log("train_embedding_loss", emb_loss)
         return loss
         
     def validation_step(self, val_batch: Tensor, batch_idx: int) -> None:
-        loss = self.step(val_batch)
+        loss, up_loss_diff, up_loss_same, emb_loss = self.step(val_batch)
         self.log("val_loss", loss)
+        self.log("val_update_loss_diff", up_loss_diff)
+        self.log("val_update_loss_same", up_loss_same)
+        self.log("val_embedding_loss", emb_loss)
         return loss
 
     def update(

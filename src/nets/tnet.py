@@ -97,19 +97,48 @@ class TNet(BaseTN):
         x_transformed_embedding: th.Tensor, 
         XY: th.Tensor, 
         p_x_given_embedding: Distribution,
+        up_val: float = 0.9
     ) -> th.Tensor:
         '''
         Calculates the MSE between the estimated and
         real embeddings.
         '''
-        
+
+        x = XY[:,0]
         x_transformed = XY[:,1]
+        labels = x.argmax(dim=1)
+        labels_transformed = x_transformed.argmax(dim=1)
+        mask_diff = th.where(
+            labels != labels_transformed, 
+            th.ones_like(labels_transformed), 
+            th.zeros_like(labels_transformed)
+        ).float()
         with th.no_grad():
             x_transformed_embedding_real = self.encode_single(x_transformed)
         
+        conditional_likelihood = p_x_given_embedding.log_prob(labels_transformed)
+        update_loss_diff = -th.einsum(
+            'hij,hij->h',
+            conditional_likelihood,
+            mask_diff
+        ).mean()
+        update_loss_same = -th.einsum(
+            'hij,hij->h',
+            conditional_likelihood,
+            1-mask_diff
+        ).mean()
+        update_loss = up_val*update_loss_diff + (1-up_val)*update_loss_same
+
         embedding_difference = x_transformed_embedding_real - x_transformed_embedding
-        loss = (embedding_difference**2).sum(1).mean()
-        return loss
+        embedding_loss = (embedding_difference**2).sum(1).mean()
+
+        loss = 0.1*update_loss + embedding_loss
+        return (
+            loss, 
+            update_loss_diff.detach().item(), 
+            update_loss_same.detach().item(),
+            embedding_loss.detach().item()
+        )
 
     def sample_from_conditional_likelihood(
         self, p_x_given_embedding: Distribution 

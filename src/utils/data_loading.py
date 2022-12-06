@@ -41,7 +41,12 @@ def load_pytorch_VAE_dataset(
 
     return train_tensor, test_tensor
 
-def append_transformation_examples(x, n_examples):
+def final_reshape(x):
+    x = x.reshape(x.shape[0],-1,*x.shape[3:])
+    x = x.transpose(0,1)
+    return x
+
+def append_transformation_examples(x, n_examples, test: bool = False):
     frame_difference = th.absolute(x[0] - x[1]).sum((2,3,4))
     mask = th.where(
         frame_difference != 0, 
@@ -63,14 +68,15 @@ def append_transformation_examples(x, n_examples):
     examples = th.stack(example_list, dim=1)
     x = th.repeat_interleave(x, n_examples, dim=2)
     x = th.cat([x, examples], dim=0)
-    x = x.reshape(x.shape[0],-1,*x.shape[3:])
-    x = x.transpose(0,1)
+    if not test:
+        x = final_reshape(x)
     return x
 
 def load_pytorch_TN_dataset(
     train_percentage=0.8,
     shuffle_seed=0,
     n_examples=10,
+    test_percentage=0.1,
 ):
     """Returns two tensors with training and validation data."""
     # Loading the data.
@@ -81,15 +87,32 @@ def load_pytorch_TN_dataset(
     th.manual_seed(shuffle_seed)
     idx = th.randperm(n_frames)
     train_tensor = train_tensor[:,:,idx]
+    test_tensor = test_tensor[:,:,idx]
     train_index = int(n_frames * train_percentage)
     val_tensor = train_tensor[:,:,train_index:,:,:,:]
     train_tensor = train_tensor[:,:,:train_index,:,:,:]
 
     train_tensor = append_transformation_examples(train_tensor, n_examples)
     val_tensor = append_transformation_examples(val_tensor, n_examples)
-    test_tensor = append_transformation_examples(test_tensor, n_examples)
+    test_tensor = append_transformation_examples(test_tensor, n_examples, test=True)
 
-    return train_tensor, val_tensor, test_tensor
+    test_index = int(n_frames * test_percentage)   # should be less than train_index
+    test_train_tensor = test_tensor[:,:,:test_index]
+    test_val_tensor = test_tensor[:,:,test_index:]    
+
+    test_train_tensor = final_reshape(test_train_tensor)
+    test_val_tensor = final_reshape(test_val_tensor)
+
+    # append % of test to train and val
+    train_tensor = th.cat([train_tensor, test_train_tensor], dim=0)
+    val_tensor = th.cat([val_tensor, test_val_tensor], dim=0)
+
+    # shuffle again
+    n_frames = train_tensor.shape[2]
+    idx = th.randperm(n_frames)
+    train_tensor = train_tensor[:,:,idx]
+
+    return train_tensor, val_tensor, test_val_tensor
 
 def estimate_token_frequency(
     train_tensor: np.ndarray,
