@@ -35,6 +35,7 @@ encoding = {
     "o": 10,
     "b": 11,
     "B": 12,
+    "m": 13,
 }
 
 sprites = {
@@ -50,6 +51,24 @@ sprites = {
     encoding["o"]: absolute(f"{filepath}/sprites/coin.png"),
     encoding["b"]: absolute(f"{filepath}/sprites/cannon_base.png"),
     encoding["B"]: absolute(f"{filepath}/sprites/cannon.png"),
+    encoding["m"]: absolute(f"{filepath}/sprites/mask.png"),
+}
+
+inverse_encoding = {
+    encoding["X"]: 'X',
+    encoding["S"]: 'S',
+    encoding["?"]: '?',
+    encoding["Q"]: 'Q',
+    encoding["E"]: 'E',
+    encoding["<"]: '<',
+    encoding[">"]: '>',
+    encoding["["]: '[',
+    encoding["]"]: ']',
+    encoding["o"]: 'o',
+    encoding["b"]: 'b',
+    encoding["B"]: 'B',
+    encoding["-"]: '-',
+    encoding["m"]: 'm',
 }
 
 
@@ -95,6 +114,17 @@ def get_img_from_level(level: np.ndarray) -> np.ndarray:
     image = np.vstack([np.asarray(row) for row in image])
 
     return image
+
+def get_str_from_level(level: np.ndarray) -> np.ndarray:
+    str_ = ''
+    for row in level:
+        str_row = ''
+        for c in row:
+            token_char = inverse_encoding[c]
+            str_row += token_char
+        str_ += str_row + '\n'
+
+    return str_
 
 
 def plot_level_from_decoded_tensor(dec: Tensor, ax):

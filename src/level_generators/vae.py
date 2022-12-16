@@ -2,7 +2,7 @@ from typing import List
 
 import matplotlib.pyplot as plt
 import numpy as np
-from torch import Tensor, randn
+from torch import Tensor, randn, ones_like, cat
 from torch.optim import Optimizer, Adam
 
 from src.nets import VanillaVAE, UNetVAE
@@ -82,12 +82,25 @@ class VAEGenerator(BaseGenerator):
 
         indices = np.random.randint(0, high=val_batch.shape[0], size=n_rows*n_cols)
         batch = val_batch[indices]
-        noise = 0*randn(batch.shape)
-        original = (batch+noise).argmax(dim=1)
-        reconstruction = self.VAE.generate(batch+noise)
+        batch_masked = create_mask(
+            batch, self.VAE.token_frequencies
+        )[0]
+        original = batch.argmax(dim=1)
+        masked = cat([batch_masked, ones_like(batch_masked[:,0:1])], dim=1)\
+            .argmax(dim=1)
+        reconstruction = self.VAE.generate(batch_masked)
+
+        # noise = 0*randn(batch.shape)
+        # original = (batch+noise).argmax(dim=1)
+        # reconstruction = self.VAE.generate(batch+noise)
         
         images_original = [
             get_img_from_level(original[i].cpu().detach().numpy()) 
+            for i in range(batch.shape[0])
+        ]
+
+        images_masked = [
+            get_img_from_level(masked[i].cpu().detach().numpy()) 
             for i in range(batch.shape[0])
         ]
 
@@ -98,8 +111,13 @@ class VAEGenerator(BaseGenerator):
 
         padding = ((0,0),(0,boundary_size+2*pad),(0,0))
         images = np.array([
-                np.concatenate((np.pad(o, padding), r), axis=1)
-                for (o, r) in zip(images_original, images_reconstructed)
+                np.concatenate([
+                    np.pad(o, padding),
+                    np.pad(m, padding),
+                    r,
+                ], axis=1)
+                for (o, m, r) in zip(
+                    images_original, images_masked, images_reconstructed)
         ])
         
         bidx_i = images_original[0].shape[1] + pad
@@ -107,11 +125,17 @@ class VAEGenerator(BaseGenerator):
         
         images[:,:,bidx_i-pad: bidx_i,:] = 255   # White before boundary
         images[:,:,bidx_f:bidx_f+pad,:] = 255    # White after boundary
+
+        images[:,:,bidx_f+pad+bidx_i-pad: bidx_f+pad+bidx_i,:] = 255
+        images[:,:,2*bidx_f+pad:2*bidx_f+2*pad,:] = 255
+
         images[:,:,bidx_i:bidx_f,0] = 0.60*255   # R
         images[:,:,bidx_i:bidx_f,1] = 0.15*255   # G
         images[:,:,bidx_i:bidx_f,2] = 0.40*255   # B
 
-        
+        images[:,:,bidx_f+pad+bidx_i:2*bidx_f+pad,0] = 0.60*255   # R
+        images[:,:,bidx_f+pad+bidx_i:2*bidx_f+pad,1] = 0.15*255   # G
+        images[:,:,bidx_f+pad+bidx_i:2*bidx_f+pad,2] = 0.40*255   # B        
 
         fig, ax = plt.subplots(n_rows, n_cols, figsize=(15,10))
         for r in range(0, n_rows):

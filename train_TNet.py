@@ -15,12 +15,14 @@ def run(**kwargs):
         log_model=True
     )   
 
-    mario_train, mario_val, frame_shape = generate_TN_dataloader()
+    mario_train, mario_val, frame_shape = generate_TN_dataloader(
+        token_hidden=kwargs.get('token_hidden', 'q_mark')
+    )
     kwargs['frame_shape'] = frame_shape
     mario_generator = TNGenerator(**kwargs)
     vae_model = load_VAE_model(**kwargs).VAE
     copy_VAE_into_TNet(vae_model, mario_generator)
-    freeze(mario_generator.tnet.unet)
+    # freeze(mario_generator.tnet.unet)
 
     callbacks = []
     if kwargs['use_early_stop']:
@@ -36,7 +38,7 @@ def run(**kwargs):
         logger=wandb_logger,
         callbacks=callbacks,          
         log_every_n_steps=4,
-        max_epochs=24
+        max_epochs=16
     ) #(accelerator='gpu')
     trainer.fit(mario_generator, mario_train, mario_val)
 
@@ -44,7 +46,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('wandb_checkpoint', type=str)
-    parser.add_argument('--z_dim', type=int, default=2, help='Latent dimension')
+    parser.add_argument('token_hidden', type=str, help='Token hidden in the dataset')
+    parser.add_argument('--z_dim', type=int, default=10, help='Latent dimension')
     parser.add_argument('--lr', type=float, default=1e-4, help='Latent dimension')
     parser.add_argument('-use_early_stop', action='store_true')
     args = parser.parse_args()

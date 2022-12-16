@@ -5,6 +5,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from src.level_generators import VAEGenerator
 from src.utils.data_loading import generate_VAE_dataloader
+from src.utils.load_models import load_VAE_model
 
 import argparse
 
@@ -16,10 +17,12 @@ def run(**kwargs):
 
     mario_train, mario_val, token_frequencies, frame_shape = \
         generate_VAE_dataloader(
-            token_hidden=kwargs.get('token_hidden', 'q_mark'))
+            token_hidden=kwargs.get('token_hidden', 'q_mark'), 
+            finetuning=True
+        )
     kwargs['frame_shape'] = frame_shape
     kwargs['token_frequencies'] = token_frequencies
-    mario_generator = VAEGenerator(**kwargs)
+    mario_generator = load_VAE_model(**kwargs)
 
     callbacks = []
     if kwargs['use_early_stop']:
@@ -42,9 +45,8 @@ def run(**kwargs):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('vae_name', type=str, help='Name of VAE class to use')
+    parser.add_argument('wandb_checkpoint', type=str)
     parser.add_argument('token_hidden', type=str, help='Token hidden in the dataset')
-    parser.add_argument('--z_dim', type=int, default=2, help='Latent dimension')
     parser.add_argument('--lr', type=float, default=1e-4, help='Latent dimension')
     parser.add_argument('--unet_detach_mode', type=str, default='features')
     parser.add_argument('-use_early_stop', action='store_true')

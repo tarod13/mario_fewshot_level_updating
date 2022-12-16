@@ -1,9 +1,12 @@
-from src.level_generators import VAEGenerator
-from src.utils.data_loading import load_numpy_VAE_dataset as  load_data
-from src.utils.plotting import get_img_from_level
-
 import os
 import argparse
+import wandb
+from pathlib import Path
+
+from src.level_generators import VAEGenerator
+from src.utils.data_loading import load_pytorch_VAE_dataset as load_data
+from src.utils.load_models import load_VAE_model
+from src.utils.plotting import get_img_from_level
 
 
 def get_checkpoint(vae_name, version):
@@ -23,17 +26,13 @@ def get_checkpoint(vae_name, version):
 def run():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('vae_name', type=str, help='Name of VAE class to use')
-    parser.add_argument('--z_dim', type=int, default=2, help='Latent dimension')
-    parser.add_argument('--version', type=int, help='Model version to load', required=False)
+    parser.add_argument('wandb_checkpoint', type=str)
+    parser.add_argument('token_hidden', type=str)
     args = parser.parse_args()
 
-    checkpoint, version = get_checkpoint(args.vae, args.version)
-    print(f'vae_name: {args.vae}, version: {version}')
-
-    mario_val = load_data()[1]
-    
-    mario_generator = VAEGenerator.load_from_checkpoint(checkpoint, **vars(args))
+    version = args.wandb_checkpoint.split("/")[-1].split(":",1)[0]
+    mario_val = load_data(token_hidden=args.token_hidden)[1]
+    mario_generator = load_VAE_model(**vars(args))    
     mario_generator.reconstruct(mario_val, version=version)
 
 

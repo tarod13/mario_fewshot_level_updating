@@ -109,7 +109,7 @@ class TNet(BaseTN):
         labels = x.argmax(dim=1)
         labels_transformed = x_transformed.argmax(dim=1)
         mask_diff = th.where(
-            labels != labels_transformed, 
+            th.absolute(x_transformed - x).sum(1) > 0, 
             th.ones_like(labels_transformed), 
             th.zeros_like(labels_transformed)
         ).float()
@@ -121,18 +121,18 @@ class TNet(BaseTN):
             'hij,hij->h',
             conditional_likelihood,
             mask_diff
-        ).mean()
+        ).sum()/(mask_diff.sum())*5 # 1/1000/5 works "well" for q_mark/cannon/coin
         update_loss_same = -th.einsum(
             'hij,hij->h',
             conditional_likelihood,
             1-mask_diff
-        ).mean()
-        update_loss = up_val*update_loss_diff + (1-up_val)*update_loss_same
+        ).sum()/((1-mask_diff).sum())*5 # 1/0.01/5 works "well" for q_mark/cannon/coin
+        update_loss = update_loss_diff + update_loss_same
 
         embedding_difference = x_transformed_embedding_real - x_transformed_embedding
         embedding_loss = (embedding_difference**2).sum(1).mean()
 
-        loss = 0.1*update_loss + embedding_loss
+        loss = update_loss + embedding_loss
         return (
             loss, 
             update_loss_diff.detach().item(), 

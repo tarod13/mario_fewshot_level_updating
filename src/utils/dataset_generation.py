@@ -2,10 +2,11 @@ import os
 import numpy as np
 import torch as th
 from torch.nn.functional import one_hot
-from itertools import combinations
+from itertools import combinations, permutations
 from copy import deepcopy
 from collections import defaultdict
 import logging
+import argparse
 
 logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
 logger = logging.getLogger("GenerationLogger")
@@ -132,7 +133,10 @@ def generate_tensor_dict(
     
     return tensor_dict
 
-def generate_vae_dataset(tensor_dict, hold_out_settings):
+def generate_vae_dataset(
+    tensor_dict, hold_out_settings, token_to_hide, 
+    finetuning, train=True
+):
     train_tensor_list = []
     test_tensor_list = []
 
@@ -148,8 +152,8 @@ def generate_vae_dataset(tensor_dict, hold_out_settings):
     logger.info(f'Storing VAE train and test datasets...')
     logger.info(f'Train dataset size: {train_tensor.shape}')
     logger.info(f'Test dataset size: {test_tensor.shape}')
-    th.save(train_tensor, './data/vae_dataset_train.pt')
-    th.save(test_tensor, './data/vae_dataset_test.pt')
+    th.save(train_tensor, f'./data/vae_dataset_{"train" if train else "test"}_no_{token_to_hide}{"" if not finetuning else "_finetuning"}.pt')
+    # th.save(test_tensor, f'./data/vae_dataset_test_no_{token_to_hide}{"" if not finetuning else "_finetuning"}.pt')
 
 def check_if_in_string(list_, string_):
     in_string = False
@@ -160,22 +164,25 @@ def check_if_in_string(list_, string_):
     return in_string        
 
 def generate_transformation_nets_dataset(
-    tensor_dict, transformation_pairs, hold_out_settings
+    tensor_dict, transformation_pairs, hold_out_origins, 
+    hold_out_destinations, token_to_hide, finetuning,
+    train=True    
 ):
     train_tensor_list = []
     test_tensor_list = []
 
-    for origin, destiny in transformation_pairs:
+    for origin, destination in transformation_pairs:
         origin_tensor = tensor_dict[origin]
-        destiny_tensor = tensor_dict[destiny]
-        stacked_tensors = th.stack([origin_tensor, destiny_tensor], dim=0)
+        destination_tensor = tensor_dict[destination]
+        stacked_tensors = th.stack([origin_tensor, destination_tensor], dim=0)
         
-        origin_hold_out = origin in hold_out_settings
-        destiny_hold_out = destiny in hold_out_settings
-        if origin_hold_out or destiny_hold_out:
+        origin_hold_out = origin in hold_out_origins
+        destination_hold_out = destination in hold_out_destinations
+        if origin_hold_out or destination_hold_out:
             test_tensor_list.append(stacked_tensors)
         else:
             train_tensor_list.append(stacked_tensors)
+            logger.info(f'Accepted for training: ({origin}, {destination})...')
 
     train_tensor = th.stack(train_tensor_list, dim=1)
     test_tensor = th.stack(test_tensor_list, dim=1)
@@ -183,15 +190,22 @@ def generate_transformation_nets_dataset(
     logger.info(f'Storing TransformationNet train and test datasets...')
     logger.info(f'Train dataset size: {train_tensor.shape}')
     logger.info(f'Test dataset size: {test_tensor.shape}')
-    th.save(train_tensor, './data/tnet_dataset_train.pt')
-    th.save(test_tensor, './data/tnet_dataset_test.pt') 
+    th.save(train_tensor, f'./data/tnet_dataset_{"train" if train else "test"}_no_{token_to_hide}{"" if not finetuning else "_finetuning"}.pt')
+    # th.save(test_tensor, f'./data/tnet_dataset_test_no_{token_to_hide}{"" if not finetuning else "_finetuning"}.pt') 
+
+def generate_permutations(list_):
+    possible_permutations = list(permutations(list_))
+    possible_permutations = ['-'.join(permutation_) for permutation_ in possible_permutations]
+    return possible_permutations
 
 def generate_dataset_from_original_levels(
     path: str = './data/basic_13_tokens',
     size: int = 14, 
     stride: int = 5, 
     num_classes: int = 13,
-    hold_out_settings: list = ['original','no_cannon','no_coins','no_cannon-no_coins']
+    token_to_hide: str = 'q_mark',
+    finetuning: bool = False,
+    train: bool = True,
 ):  
     # Definition of basic dictionaries
     param_dict = {
@@ -215,8 +229,51 @@ def generate_dataset_from_original_levels(
     transformation_dict = {
         'no_q_mark': {'Q':'S','?':'S'},
         'no_cannon': {'b':'E','B':'E'},
-        'no_coins': {'o':'-'},
+        'no_coin': {'o':'-'},
     }
+
+    if not finetuning:
+        if token_to_hide == 'q_mark':
+            hold_out_settings = ['original','no_cannon','no_coin'] + generate_permutations(['no_coin','no_cannon'])            
+        elif token_to_hide == 'cannon':
+            hold_out_settings = ['original','no_q_mark','no_coin'] + generate_permutations(['no_coin','no_q_mark'])
+        elif token_to_hide == 'coin':
+            hold_out_settings = ['original','no_q_mark','no_cannon'] + generate_permutations(['no_cannon','no_q_mark'])
+        else:
+            raise ValueError("Invalid token")
+        
+        hold_out_origins = hold_out_settings.copy()
+        hold_out_destinations = hold_out_settings.copy()
+    else:
+        if token_to_hide == 'q_mark':
+            hold_out_origins = ['original','no_cannon','no_coin'] + generate_permutations(['no_coin','no_cannon'])
+            hold_out_destinations = (
+                ['no_q_mark']
+                + generate_permutations(['no_coin','no_q_mark'])
+                + generate_permutations(['no_q_mark','no_cannon'])
+                + generate_permutations(['no_coin','no_cannon','no_q_mark'])
+            )            
+        elif token_to_hide == 'cannon':
+            hold_out_origins = ['original','no_q_mark','no_coin'] + generate_permutations(['no_coin','no_q_mark'])
+            hold_out_destinations = (
+                ['no_cannon']
+                + generate_permutations(['no_coin','no_cannon'])
+                + generate_permutations(['no_q_mark','no_cannon'])
+                + generate_permutations(['no_coin','no_cannon','no_q_mark'])
+            )            
+        elif token_to_hide == 'coin':
+            hold_out_origins = ['original','no_q_mark','no_cannon'] + generate_permutations(['no_cannon','no_q_mark'])
+            hold_out_destinations = (
+                ['no_coin']
+                + generate_permutations(['no_coin','no_q_mark'])
+                + generate_permutations(['no_coin','no_cannon'])
+                + generate_permutations(['no_coin','no_cannon','no_q_mark'])
+            )
+        else:
+            raise ValueError("Invalid token")
+        hold_out_settings = hold_out_destinations.copy()
+
+        path = path + '_finetuning_' + token_to_hide + ('/finetuning' if train else '/evaluation')
 
     # Generation of token tensors 
     logger.info(f'Generating token dicts with transformations...')
@@ -240,13 +297,25 @@ def generate_dataset_from_original_levels(
 
     # Generation of datasets
     logger.info(f'Generating dataset to train VAE...')
-    generate_vae_dataset(tensor_dict, hold_out_settings)
+    generate_vae_dataset(
+        tensor_dict, hold_out_settings, token_to_hide, finetuning, train
+    )
 
     logger.info(f'Generating dataset to train VAE...')
     generate_transformation_nets_dataset(
-        tensor_dict, transformation_pairs, hold_out_settings
+        tensor_dict, transformation_pairs, hold_out_origins, 
+        hold_out_destinations, token_to_hide, finetuning, train
     )
 
 
 if __name__ == "__main__":
-    generate_dataset_from_original_levels()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('token_to_hide', type=str)
+    parser.add_argument('-finetune', action='store_true')
+    parser.add_argument('-test', action='store_true')
+    args = parser.parse_args()
+
+    generate_dataset_from_original_levels(
+        token_to_hide=args.token_to_hide, finetuning=args.finetune, train=(not args.test)
+    )
