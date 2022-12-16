@@ -35,7 +35,7 @@ python finetune_VAE.py <wandb_checkpoint> <q_mark/cannon/coin>
 
 ## References
 
-1. For the plotting functions and the basic architecture of the VAE (````vanilla_vae.py```), we based our work in the repository [minimal_VAE_on_Mario](https://github.com/miguelgondu/minimal_VAE_on_Mario).
+1. For the plotting functions and the basic architecture of the VAE (```vanilla_vae.py```), we based our work in the repository [minimal_VAE_on_Mario](https://github.com/miguelgondu/minimal_VAE_on_Mario).
 2. For the Super Mario Bros. dataset, we referred to the repository [Mario-AI-Framework](https://github.com/amidos2006/Mario-AI-Framework).
 
 ## Project directory
