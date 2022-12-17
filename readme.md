@@ -49,6 +49,7 @@ python finetune_VAE.py <wandb_checkpoint> <q_mark/cannon/coin>
     ├── finetune_TNet.py             # fine-tunes the TNet updater (ideally, receives as input the fine-tuned VAE)
     ├── create_evaluation_files.py   # converts pickled texts into separate frame files
     ├── evaluation.py                # accuracy evaluation based on generated frame files     
+    ├── LSTM_approach.ipynb          # notebooko where the LSTM model was developed and evaluated    
     ├── data/                        # data files used in the project  
     └── src/                         # contains all code in the project  
         ├── LICENSE                  # MIT license  
